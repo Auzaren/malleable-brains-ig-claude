@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Malleable Brains — Feed Viewer</title>
+
+<style>
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  max-width: 900px;
+  margin: 24px auto;
+  padding: 0 16px;
+  line-height: 1.45;
+  background:#fafafa;
+}
+header {
+  display:flex;
+  gap:12px;
+  align-items:baseline;
+  flex-wrap:wrap;
+  margin-bottom: 12px;
+}
+h1 { margin:0; }
+a { color:#0066cc; text-decoration:none; }
+a:hover { text-decoration:underline; }
+.muted { color:#666; font-size:14px; }
+
+.controls {
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin: 12px 0 20px;
+}
+input, select {
+  padding:8px 10px;
+  border:1px solid #ddd;
+  border-radius:10px;
+  font-size:14px;
+}
+
+.item {
+  background:#fff;
+  border:1px solid #e5e5e5;
+  border-radius:16px;
+  padding:14px;
+  margin-bottom:18px;
+}
+.title { font-weight:700; font-size:16px; margin-bottom:6px; }
+.meta { color:#777; font-size:13px; margin-bottom:8px; }
+.content img, .content video {
+  max-width:100%;
+  border-radius:12px;
+  margin:10px 0;
+  display:block;
+}
+.content p { margin:8px 0; }
+</style>
+</head>
+
+<body>
+<header>
+  <h1>Malleable Brains — Archive</h1>
+  <span class="muted">(<a href="instagram-feed.xml">RSS</a> · <a href="./">home</a>)</span>
+</header>
+
+<div class="controls">
+  <label class="muted">Show</label>
+  <select id="limit">
+    <option value="20">20</option>
+    <option value="50">50</option>
+    <option value="100">100</option>
+    <option value="99999">All</option>
+  </select>
+
+  <input id="search" placeholder="Filter by title…" />
+  <span id="status" class="muted"></span>
+</div>
+
+<div id="app" class="muted">Loading…</div>
+
+<script>
+const FEED = "instagram-feed.xml";
+
+function text(el, q){
+  const n = el.querySelector(q);
+  return n ? n.textContent.trim() : "";
+}
+
+function escapeHTML(s){
+  return s.replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+async function loadFeed(){
+  const r = await fetch(FEED, {cache:"no-store"});
+  if(!r.ok) throw new Error("Could not load RSS");
+  const xml = await r.text();
+  return new DOMParser().parseFromString(xml,"text/xml")
+    .querySelectorAll("channel > item");
+}
+
+function render(items){
+  const q = document.getElementById("search").value.toLowerCase();
+  const lim = +document.getElementById("limit").value;
+
+  let filtered = [...items];
+  if(q) filtered = filtered.filter(i => text(i,"title").toLowerCase().includes(q));
+
+  const shown = filtered.slice(0, lim);
+  document.getElementById("status").textContent =
+    `${shown.length} / ${items.length} posts`;
+
+  const html = shown.map(i=>{
+    const title = escapeHTML(text(i,"title") || "Untitled");
+    const date = escapeHTML(text(i,"pubDate"));
+    const link = text(i,"link");
+
+    const ce = i.getElementsByTagName("content:encoded")[0];
+    const content = ce ? ce.textContent : "";
+
+    return `
+      <article class="item">
+        <div class="title"><a href="${link}" target="_blank">${title}</a></div>
+        <div class="meta">${date}</div>
+        <div class="content">${content}</div>
+      </article>
+    `;
+  }).join("");
+
+  document.getElementById("app").innerHTML = html || "<div class='muted'>No posts.</div>";
+}
+
+(async()=>{
+  try{
+    const items = await loadFeed();
+    window._items = items;
+    render(items);
+    document.getElementById("limit").onchange = ()=>render(items);
+    document.getElementById("search").oninput = ()=>render(items);
+  }catch(e){
+    document.getElementById("app").textContent = e.message;
+  }
+})();
+</script>
+</body>
+</html>
